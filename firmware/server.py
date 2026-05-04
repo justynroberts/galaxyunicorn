@@ -81,6 +81,10 @@ class Server:
                 self._handle_brightness(cl, body)
             elif method == "POST" and path == "/clear":
                 self._handle_clear(cl)
+            elif method == "GET" and path == "/wifi/status":
+                self._handle_wifi_status(cl)
+            elif method == "POST" and path == "/wifi/reset":
+                self._handle_wifi_reset(cl)
             else:
                 self._send(cl, 404, {"error": "not found"})
 
@@ -175,3 +179,26 @@ class Server:
     def _handle_clear(self, cl):
         self.renderer.clear()
         self._send(cl, 200, {"status": "ok", "mode": "idle"})
+
+    def _handle_wifi_status(self, cl):
+        import credential_store
+        creds = credential_store.load()
+        configured = bool(creds and creds.get("ssid"))
+        self._send(cl, 200, {
+            "configured": configured,
+            "ssid": creds.get("ssid") if configured else None,
+        })
+
+    def _handle_wifi_reset(self, cl):
+        import credential_store
+        import machine
+        credential_store.clear()
+        self._send(cl, 200, {"status": "ok", "rebooting": True})
+        # Give response time to flush
+        try:
+            cl.close()
+        except Exception:
+            pass
+        import time
+        time.sleep(1)
+        machine.reset()

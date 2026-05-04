@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { DeviceStatus as StatusType } from '../types/display';
+import { resetWifi } from '../lib/api';
 
 interface Props {
   connected: boolean;
@@ -16,6 +17,18 @@ export function DeviceStatus({ connected, status, error, baseUrl, onBaseUrlChang
   const handleSave = () => {
     onBaseUrlChange(urlInput);
     setEditing(false);
+  };
+
+  const handleResetWifi = async () => {
+    const confirmed = window.confirm(
+      'Reset WiFi credentials? The display will reboot into setup mode and create a "GalacticUnicorn-Setup" network you can join to reconfigure.'
+    );
+    if (!confirmed) return;
+    try {
+      await resetWifi(baseUrl);
+    } catch {
+      // Device reboots before responding cleanly - this is expected
+    }
   };
 
   return (
@@ -61,6 +74,16 @@ export function DeviceStatus({ connected, status, error, baseUrl, onBaseUrlChang
       )}
       {error && !connected && (
         <span className="text-red-400 text-xs">{error}</span>
+      )}
+
+      {connected && (
+        <button
+          onClick={handleResetWifi}
+          className="ml-auto text-xs text-gray-500 hover:text-red-400 border border-surface-500 hover:border-red-500/50 rounded px-2 py-1 transition-colors"
+          title="Clear saved WiFi credentials and reboot into setup mode"
+        >
+          Reset WiFi
+        </button>
       )}
     </div>
   );

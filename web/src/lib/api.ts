@@ -45,3 +45,11 @@ export function setBrightness(baseUrl: string, payload: BrightnessPayload) {
 export function clearDisplay(baseUrl: string) {
   return enqueue(() => request(baseUrl, '/clear', 'POST'));
 }
+
+export function resetWifi(baseUrl: string) {
+  return enqueue(() => request(baseUrl, '/wifi/reset', 'POST'));
+}
+
+export function getWifiStatus(baseUrl: string) {
+  return enqueue(() => request<{ configured: boolean; ssid: string | null }>(baseUrl, '/wifi/status', 'GET'));
+}
