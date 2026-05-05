@@ -1,67 +1,81 @@
 import socket
 import struct
+import time
 
 MDNS_ADDR = "224.0.0.251"
 MDNS_PORT = 5353
 
 
-class MDNSResponder:
-    def __init__(self, hostname, ip):
+class MDNSAnnouncer:
+    """Periodically sends unsolicited mDNS A-record announcements.
+
+    Doesn't bind port 5353 (the firmware's native mDNS already has it),
+    only sends multicast announcements. Modern OS mDNS resolvers cache
+    these so `<hostname>.local` resolves on the network for the TTL.
+    """
+
+    def __init__(self, hostname, ip, interval_sec=30, ttl=60):
         self.hostname = hostname
         self.ip = ip
+        self.interval_ms = interval_sec * 1000
+        self.ttl = ttl
         self.sock = None
+        self.last_send = 0
+        self.packet = b""
 
     def start(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.sock.bind(("0.0.0.0", MDNS_PORT))
-        mreq = struct.pack("4s4s",
-                           socket.inet_aton(MDNS_ADDR),
-                           socket.inet_aton("0.0.0.0"))
-        self.sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
-        self.sock.settimeout(0)
+        # No bind — send-only.
+        self.packet = self._build_announcement()
+        self._send()
+        # Send a couple of initial announcements so caches populate fast.
+        time.sleep_ms(200)
+        self._send()
+        self.last_send = time.ticks_ms()
 
     def poll(self):
+        if not self.sock:
+            return
+        now = time.ticks_ms()
+        if time.ticks_diff(now, self.last_send) >= self.interval_ms:
+            self._send()
+            self.last_send = now
+
+    def _send(self):
         try:
-            data, addr = self.sock.recvfrom(256)
-            name = self.hostname + ".local"
-            if name.encode() in data or self._match_query(data):
-                response = self._build_response()
-                self.sock.sendto(response, (MDNS_ADDR, MDNS_PORT))
-        except OSError:
+            self.sock.sendto(self.packet, (MDNS_ADDR, MDNS_PORT))
+        except Exception:
             pass
 
-    def _match_query(self, data):
-        # Check for our hostname in DNS query format (length-prefixed labels)
+    def stop(self):
         try:
-            hostname_labels = self.hostname.encode()
-            local_labels = b"local"
-            # Build DNS-encoded name: \x07display\x05local\x00
-            encoded = bytes([len(hostname_labels)]) + hostname_labels
-            encoded += bytes([len(local_labels)]) + local_labels + b"\x00"
-            return encoded in data
+            if self.sock:
+                self.sock.close()
         except Exception:
-            return False
+            pass
+        self.sock = None
 
-    def _build_response(self):
-        # Build a minimal mDNS A record response
-        name = self.hostname
-        # Transaction ID (0), Flags (authoritative response)
+    def _build_announcement(self):
+        # Unsolicited mDNS response (RFC 6762 section 8.3).
+        # Header: ID=0, flags=0x8400 (response, authoritative),
+        # QDCOUNT=0, ANCOUNT=1, NSCOUNT=0, ARCOUNT=0
         header = struct.pack("!HHHHHH", 0, 0x8400, 0, 1, 0, 0)
 
-        # Answer: name + type A + class IN (cache flush) + TTL + rdlength + IP
-        # Encode name as DNS labels
-        answer_name = b""
-        for label in [name, "local"]:
-            label_bytes = label.encode()
-            answer_name += bytes([len(label_bytes)]) + label_bytes
-        answer_name += b"\x00"
+        # Name in DNS label form: <len><hostname><len>local<00>
+        name_bytes = b""
+        for label in (self.hostname, "local"):
+            b = label.encode()
+            name_bytes += bytes([len(b)]) + b
+        name_bytes += b"\x00"
 
-        # Type A (1), Class IN with cache-flush bit (0x8001), TTL 120s, RDLENGTH 4
-        answer_rr = struct.pack("!HHIH", 1, 0x8001, 120, 4)
+        # Type A (1), class IN with cache-flush bit set (0x8001), TTL, rdlength=4
+        rr = struct.pack("!HHIH", 1, 0x8001, self.ttl, 4)
 
-        # IP address as 4 bytes
-        ip_parts = self.ip.split(".")
-        ip_bytes = bytes([int(p) for p in ip_parts])
+        # IP address as four bytes
+        ip_bytes = bytes(int(p) for p in self.ip.split("."))
 
-        return header + answer_name + answer_rr + ip_bytes
+        return header + name_bytes + rr + ip_bytes
+
+
+# Backwards-compat alias for any old import paths
+MDNSResponder = MDNSAnnouncer

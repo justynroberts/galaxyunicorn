@@ -3,6 +3,65 @@ import ujson
 import socket
 
 
+ROOT_HTML = """<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Galactic Unicorn</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0a0a0a;color:#fff;font-family:-apple-system,system-ui,sans-serif;padding:20px;min-height:100vh}
+.box{max-width:480px;margin:30px auto;background:#1a1a1a;border:1px solid #333;border-radius:12px;padding:24px}
+h1{font-size:22px;margin-bottom:6px;background:linear-gradient(90deg,#0ff,#f0f);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+p.sub{color:#888;font-size:13px;margin-bottom:18px}
+.row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #222;font-size:13px}
+.row:last-child{border-bottom:0}
+.k{color:#888}.v{color:#0ff;font-family:monospace}
+h2{font-size:13px;color:#aaa;margin:18px 0 8px;text-transform:uppercase;letter-spacing:1px}
+ul{list-style:none}
+li{padding:5px 0;font-family:monospace;font-size:12px;color:#ccc}
+.m{color:#888}.p{color:#0f9}.q{color:#f93}
+form{margin-top:18px}
+input,button{width:100%;background:#0a0a0a;border:1px solid #333;color:#fff;padding:10px;border-radius:8px;font-size:14px;font-family:inherit}
+input{margin-bottom:8px}
+input:focus{outline:none;border-color:#0ff}
+button{background:#0ff;color:#000;font-weight:600;cursor:pointer;border:none}
+button:hover{background:#fff}
+button.ghost{background:transparent;color:#888;border:1px solid #333;margin-top:8px}
+button.ghost:hover{color:#f66;border-color:#a00}
+</style></head><body>
+<div class="box">
+<h1>Galactic Unicorn</h1>
+<p class="sub">53x11 RGB display</p>
+<div class="row"><span class="k">IP</span><span class="v">{IP}</span></div>
+<div class="row"><span class="k">Mode</span><span class="v">{MODE}</span></div>
+<div class="row"><span class="k">Effect</span><span class="v">{EFFECT}</span></div>
+<div class="row"><span class="k">Brightness</span><span class="v">{BR}</span></div>
+<div class="row"><span class="k">Free memory</span><span class="v">{MEM} KB</span></div>
+<div class="row"><span class="k">Uptime</span><span class="v">{UP}s</span></div>
+<form id="f">
+<input id="t" placeholder="Send a message" required>
+<button type="submit">Scroll on display</button>
+</form>
+<button class="ghost" onclick="if(confirm('Reset Wi-Fi and reboot?'))fetch('/wifi/reset',{method:'POST'})">Reset Wi-Fi</button>
+<h2>Endpoints</h2><ul>
+<li><span class="m">GET</span> /status</li>
+<li><span class="p">POST</span> /message <span class="q">{text,color,speed,scale,repeat,font}</span></li>
+<li><span class="p">POST</span> /pixels <span class="q">{pixels:base64}</span></li>
+<li><span class="p">POST</span> /effect <span class="q">{name}</span></li>
+<li><span class="p">POST</span> /brightness <span class="q">{value:0..1}</span></li>
+<li><span class="p">POST</span> /clear</li>
+<li><span class="m">GET</span> /wifi/status</li>
+<li><span class="p">POST</span> /wifi/reset</li>
+</ul>
+</div>
+<script>
+document.getElementById('f').onsubmit=async e=>{e.preventDefault();
+const t=document.getElementById('t').value;
+await fetch('/message',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t,color:[0,255,0],speed:1,repeat:1})});
+document.getElementById('t').value='';};
+</script></body></html>
+"""
+
+
 class Server:
     def __init__(self, renderer, effects_registry, ip_address, port=8080):
         self.renderer = renderer
@@ -72,6 +131,9 @@ class Server:
                 return
 
             # Route dispatch
+            if method == "GET" and path == "/":
+                self._handle_root(cl)
+                return
             if method == "GET" and path == "/status":
                 self._handle_status(cl)
             elif method == "POST" and path == "/message":
@@ -134,6 +196,26 @@ class Server:
                 "Connection: close\r\n\r\n"
             ).format(status, st)
             cl.sendall(headers.encode())
+
+    def _handle_root(self, cl):
+        import time
+        uptime = int(time.time() - self._start_time)
+        html = ROOT_HTML
+        html = html.replace("{IP}", self.ip)
+        html = html.replace("{MODE}", self.renderer.mode)
+        html = html.replace("{EFFECT}", self.renderer.effect_name or "-")
+        html = html.replace("{BR}", str(self.renderer.get_brightness()))
+        html = html.replace("{MEM}", str(gc.mem_free() // 1024))
+        html = html.replace("{UP}", str(uptime))
+        body = html.encode("utf-8")
+        headers = (
+            "HTTP/1.1 200 OK\r\n"
+            "Content-Type: text/html; charset=utf-8\r\n"
+            "Content-Length: {}\r\n"
+            "Cache-Control: no-store\r\n"
+            "Connection: close\r\n\r\n"
+        ).format(len(body))
+        cl.sendall(headers.encode() + body)
 
     def _handle_status(self, cl):
         import time

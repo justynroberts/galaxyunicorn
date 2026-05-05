@@ -47,7 +47,17 @@ c = credential_store.load()
 if not c or not c.get("ssid"):
     run_portal()  # never returns
 
-# Connect with stored credentials
+# Connect with stored credentials.
+# Make sure AP is fully off before bringing STA up — the captive-portal
+# AP can survive a soft reboot, and trying to connect with both up
+# silently fails on this firmware.
+try:
+    ap = network.WLAN(network.AP_IF)
+    ap.active(False)
+    time.sleep(1)
+except Exception:
+    pass
+
 try:
     network.hostname(HOSTNAME)
 except Exception:
@@ -55,6 +65,7 @@ except Exception:
 
 wlan = network.WLAN(network.STA_IF)
 wlan.active(True)
+time.sleep(1)
 try:
     wlan.config(hostname=HOSTNAME)
 except Exception:
@@ -64,7 +75,7 @@ print("[boot] connecting to", c["ssid"])
 wlan.connect(c["ssid"], c["password"])
 
 start = time.time()
-while not wlan.isconnected() and time.time() - start < 20:
+while not wlan.isconnected() and time.time() - start < 25:
     time.sleep(1)
 
 if not wlan.isconnected():
@@ -78,8 +89,17 @@ server = Server(renderer, EFFECTS, ip, PORT)
 server.start(time.time())
 print("[boot] HTTP server on port", PORT)
 
-# mDNS skipped — port 5353 is bound by the firmware's native mDNS,
-# and our extra responder leaks a half-bound socket on startup.
+# Send-only mDNS announcer — broadcasts <hostname>.local periodically.
+# Doesn't bind port 5353 so it doesn't conflict with the firmware's
+# native mDNS; just sends unsolicited A records to the multicast group.
+mdns = None
+try:
+    from mdns import MDNSAnnouncer
+    mdns = MDNSAnnouncer(HOSTNAME, ip)
+    mdns.start()
+    print("[boot] mDNS announcing:", HOSTNAME + ".local ->", ip)
+except Exception as e:
+    print("[boot] mDNS failed:", e)
 
 renderer.clear()
 gc.collect()
@@ -94,6 +114,12 @@ while True:
         server.poll()
     except Exception as e:
         print("[main] server.poll error:", e)
+
+    if mdns:
+        try:
+            mdns.poll()
+        except Exception:
+            pass
 
     now = time.ticks_ms()
     if time.ticks_diff(now, last_render) >= RENDER_INTERVAL_MS:
