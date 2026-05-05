@@ -47,6 +47,12 @@ c = credential_store.load()
 if not c or not c.get("ssid"):
     run_portal()  # never returns
 
+# Show "Connecting..." in cyan while trying to join saved WiFi
+renderer.set_scroll("Connecting", [0, 200, 255], speed=3, scale=1, repeat=0, font="bitmap6")
+for _ in range(40):
+    renderer.tick()
+    time.sleep_ms(15)
+
 # Connect with stored credentials.
 # Make sure AP is fully off before bringing STA up — the captive-portal
 # AP can survive a soft reboot, and trying to connect with both up
@@ -85,6 +91,16 @@ if not wlan.isconnected():
 ip = wlan.ifconfig()[0]
 print("[boot] connected", ip)
 
+# Sync clock to NTP (best effort, non-fatal)
+try:
+    import timesync
+    if timesync.sync():
+        print("[boot] NTP synced")
+    else:
+        print("[boot] NTP sync failed (clock will retry on first use)")
+except Exception as e:
+    print("[boot] timesync import failed:", e)
+
 server = Server(renderer, EFFECTS, ip, PORT)
 server.start(time.time())
 print("[boot] HTTP server on port", PORT)
@@ -101,13 +117,16 @@ try:
 except Exception as e:
     print("[boot] mDNS failed:", e)
 
-renderer.clear()
+# Boot indicator: scroll IP in green so you know it's online and on what address
+renderer.set_scroll(ip, [0, 255, 0], speed=3, scale=1, repeat=2, font="bitmap6")
+
 gc.collect()
 print("[boot] free mem:", gc.mem_free())
 
 # Throttle renderer to ~30 fps so it doesn't saturate the LED PIO/SPI
 RENDER_INTERVAL_MS = 33
 last_render = time.ticks_ms()
+last_ntp_check = time.time()
 
 while True:
     try:
@@ -120,6 +139,15 @@ while True:
             mdns.poll()
         except Exception:
             pass
+
+    # Re-sync NTP every hour
+    if time.time() - last_ntp_check > 3600:
+        try:
+            import timesync
+            timesync.maybe_resync()
+        except Exception:
+            pass
+        last_ntp_check = time.time()
 
     now = time.ticks_ms()
     if time.ticks_diff(now, last_render) >= RENDER_INTERVAL_MS:

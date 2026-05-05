@@ -8,56 +8,142 @@ ROOT_HTML = """<!DOCTYPE html>
 <title>Galactic Unicorn</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:#0a0a0a;color:#fff;font-family:-apple-system,system-ui,sans-serif;padding:20px;min-height:100vh}
-.box{max-width:480px;margin:30px auto;background:#1a1a1a;border:1px solid #333;border-radius:12px;padding:24px}
-h1{font-size:22px;margin-bottom:6px;background:linear-gradient(90deg,#0ff,#f0f);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+body{background:#0a0a0a;color:#fff;font-family:-apple-system,system-ui,sans-serif;padding:16px;min-height:100vh}
+.box{max-width:520px;margin:20px auto;background:#1a1a1a;border:1px solid #333;border-radius:12px;padding:22px}
+h1{font-size:24px;margin-bottom:4px;background:linear-gradient(90deg,#0ff,#f0f);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
 p.sub{color:#888;font-size:13px;margin-bottom:18px}
-.row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #222;font-size:13px}
-.row:last-child{border-bottom:0}
-.k{color:#888}.v{color:#0ff;font-family:monospace}
-h2{font-size:13px;color:#aaa;margin:18px 0 8px;text-transform:uppercase;letter-spacing:1px}
-ul{list-style:none}
-li{padding:5px 0;font-family:monospace;font-size:12px;color:#ccc}
-.m{color:#888}.p{color:#0f9}.q{color:#f93}
-form{margin-top:18px}
-input,button{width:100%;background:#0a0a0a;border:1px solid #333;color:#fff;padding:10px;border-radius:8px;font-size:14px;font-family:inherit}
-input{margin-bottom:8px}
-input:focus{outline:none;border-color:#0ff}
+h2{font-size:11px;color:#888;margin:18px 0 8px;text-transform:uppercase;letter-spacing:1.5px}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;font-size:12px}
+.grid div{display:flex;justify-content:space-between;padding:6px 8px;background:#0a0a0a;border-radius:6px}
+.grid .k{color:#888}.grid .v{color:#0ff;font-family:monospace}
+label{display:block;font-size:12px;color:#aaa;margin:10px 0 4px}
+input,select,textarea,button{width:100%;background:#0a0a0a;border:1px solid #333;color:#fff;padding:10px;border-radius:8px;font-size:14px;font-family:inherit}
+input:focus,select:focus,textarea:focus{outline:none;border-color:#0ff}
+input[type=color]{height:40px;padding:2px;cursor:pointer}
+input[type=range]{padding:0;height:8px;background:#222;border:0;-webkit-appearance:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;background:#0ff;border-radius:50%;cursor:pointer}
+.r2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.r3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.r4{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
 button{background:#0ff;color:#000;font-weight:600;cursor:pointer;border:none}
-button:hover{background:#fff}
-button.ghost{background:transparent;color:#888;border:1px solid #333;margin-top:8px}
-button.ghost:hover{color:#f66;border-color:#a00}
+button:hover{background:#fff;color:#000}
+button.fx{background:#1a1a1a;color:#0ff;border:1px solid #0ff;padding:10px 6px;font-size:12px;font-weight:500}
+button.fx:hover{background:#0ff;color:#000}
+button.fx.active{background:#0ff;color:#000}
+button.alt{background:#1a1a1a;color:#aaa;border:1px solid #333}
+button.alt:hover{background:#222;color:#fff;border-color:#666}
+button.danger{background:transparent;color:#888;border:1px solid #333;margin-top:8px}
+button.danger:hover{color:#f66;border-color:#a00}
+.flash{margin-top:10px;padding:8px;border-radius:6px;font-size:12px;display:none;text-align:center}
+.ok{background:#0a3a1a;color:#4f9;display:block}
+.err{background:#3a0a0a;color:#f66;display:block}
+.row{display:flex;align-items:center;gap:8px}
+.row span{font-family:monospace;color:#0ff;font-size:13px;min-width:40px;text-align:right}
 </style></head><body>
 <div class="box">
 <h1>Galactic Unicorn</h1>
 <p class="sub">53x11 RGB display</p>
-<div class="row"><span class="k">IP</span><span class="v">{IP}</span></div>
-<div class="row"><span class="k">Mode</span><span class="v">{MODE}</span></div>
-<div class="row"><span class="k">Effect</span><span class="v">{EFFECT}</span></div>
-<div class="row"><span class="k">Brightness</span><span class="v">{BR}</span></div>
-<div class="row"><span class="k">Free memory</span><span class="v">{MEM} KB</span></div>
-<div class="row"><span class="k">Uptime</span><span class="v">{UP}s</span></div>
-<form id="f">
-<input id="t" placeholder="Send a message" required>
-<button type="submit">Scroll on display</button>
-</form>
-<button class="ghost" onclick="if(confirm('Reset Wi-Fi and reboot?'))fetch('/wifi/reset',{method:'POST'})">Reset Wi-Fi</button>
-<h2>Endpoints</h2><ul>
-<li><span class="m">GET</span> /status</li>
-<li><span class="p">POST</span> /message <span class="q">{text,color,speed,scale,repeat,font}</span></li>
-<li><span class="p">POST</span> /pixels <span class="q">{pixels:base64}</span></li>
-<li><span class="p">POST</span> /effect <span class="q">{name}</span></li>
-<li><span class="p">POST</span> /brightness <span class="q">{value:0..1}</span></li>
-<li><span class="p">POST</span> /clear</li>
-<li><span class="m">GET</span> /wifi/status</li>
-<li><span class="p">POST</span> /wifi/reset</li>
-</ul>
+
+<div class="grid">
+<div><span class="k">IP</span><span class="v">{IP}</span></div>
+<div><span class="k">Uptime</span><span class="v">{UP}s</span></div>
+<div><span class="k">Mode</span><span class="v" id="vm">{MODE}</span></div>
+<div><span class="k">Effect</span><span class="v" id="ve">{EFFECT}</span></div>
+<div><span class="k">Memory</span><span class="v">{MEM}K</span></div>
+<div><span class="k">Brightness</span><span class="v" id="vb">{BR}</span></div>
 </div>
+
+<h2>Message</h2>
+<input id="t" placeholder="Type a message..." value="HELLO">
+<div class="r3" style="margin-top:8px">
+<div><label>Color</label><input type="color" id="c" value="#00ff00"></div>
+<div><label>Speed <span id="sv">3</span></label><input type="range" id="s" min="1" max="10" value="3"></div>
+<div><label>Font</label><select id="f"><option>bitmap8</option><option>bitmap6</option><option>font8</option><option>sans</option><option>gothic</option><option>cursive</option><option>serif</option><option>serif_italic</option></select></div>
+</div>
+<div class="r2" style="margin-top:8px">
+<button id="send">Scroll once</button>
+<button id="loop" class="alt">Scroll forever</button>
+</div>
+
+<h2>Effects</h2>
+<div class="r4">
+<button class="fx" data-fx="fire">Fire</button>
+<button class="fx" data-fx="rainbow">Rainbow</button>
+<button class="fx" data-fx="supercomputer">Supercomp</button>
+<button class="fx" data-fx="retroprompt">Retro</button>
+</div>
+
+<h2>Clock</h2>
+<div class="r3">
+<select id="cz"><option>UK</option><option>Paris</option><option>NY</option><option>LA</option><option>Tokyo</option><option>Sydney</option><option>UTC</option></select>
+<input type="color" id="cc" value="#00ffc8">
+<label style="display:flex;align-items:center;gap:6px;color:#aaa;font-size:13px;background:#0a0a0a;border:1px solid #333;border-radius:8px;padding:0 10px;margin:0"><input type="checkbox" id="ck" style="width:auto">Chunky</label>
+</div>
+<button id="cb" style="margin-top:8px">Show clock</button>
+
+<h2>Brightness <span id="bv" style="color:#0ff;float:right">50%</span></h2>
+<input type="range" id="b" min="0" max="100" value="50">
+
+<div class="r2" style="margin-top:14px">
+<button class="alt" id="clr">Clear display</button>
+<button class="danger" id="rwf">Reset Wi-Fi</button>
+</div>
+
+<div id="flash" class="flash"></div>
+</div>
+
 <script>
-document.getElementById('f').onsubmit=async e=>{e.preventDefault();
-const t=document.getElementById('t').value;
-await fetch('/message',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t,color:[0,255,0],speed:1,repeat:1})});
-document.getElementById('t').value='';};
+const $=id=>document.getElementById(id),flash=$('flash');
+function note(t,ok){flash.textContent=t;flash.className='flash '+(ok?'ok':'err');setTimeout(()=>flash.style.display='none',2500)}
+function hex2rgb(h){return [parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)]}
+async function api(p,b){
+  const o={method:'POST',headers:{'Content-Type':'application/json'}};
+  if(b)o.body=JSON.stringify(b);
+  const r=await fetch(p,o);
+  return r.json();
+}
+$('s').oninput=()=>$('sv').textContent=$('s').value;
+$('b').oninput=async()=>{
+  const v=$('b').value/100;
+  $('bv').textContent=Math.round(v*100)+'%';
+  await api('/brightness',{value:v});
+};
+async function sendMsg(repeat){
+  try{
+    await api('/message',{text:$('t').value,color:hex2rgb($('c').value),speed:+$('s').value,font:$('f').value,repeat:repeat});
+    note('Sent: '+$('t').value,1);
+  }catch(e){note('Failed',0)}
+}
+$('send').onclick=()=>sendMsg(1);
+$('loop').onclick=()=>sendMsg(0);
+document.querySelectorAll('.fx').forEach(b=>b.onclick=async()=>{
+  document.querySelectorAll('.fx').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+  await api('/effect',{name:b.dataset.fx});
+  note(b.dataset.fx+' running',1);
+});
+$('clr').onclick=async()=>{
+  document.querySelectorAll('.fx').forEach(x=>x.classList.remove('active'));
+  await api('/clear');
+  note('Cleared',1);
+};
+$('cb').onclick=async()=>{
+  document.querySelectorAll('.fx').forEach(x=>x.classList.remove('active'));
+  const r=await api('/clock',{zone:$('cz').value,color:hex2rgb($('cc').value),chunky:$('ck').checked});
+  note(r.synced?'Clock '+r.zone+($('ck').checked?' chunky':''):'Clock set ('+r.zone+', NTP not synced yet)',r.synced);
+};
+$('rwf').onclick=()=>{if(confirm('Reset Wi-Fi and reboot?'))fetch('/wifi/reset',{method:'POST'})};
+
+// Live status refresh every 3s
+async function refresh(){
+  try{
+    const s=await(await fetch('/status')).json();
+    $('vm').textContent=s.mode;
+    $('ve').textContent=s.effect||'-';
+    $('vb').textContent=s.brightness;
+  }catch(e){}
+}
+setInterval(refresh,3000);
 </script></body></html>
 """
 
@@ -146,6 +232,8 @@ class Server:
                 self._handle_brightness(cl, body)
             elif method == "POST" and path == "/clear":
                 self._handle_clear(cl)
+            elif method == "POST" and path == "/clock":
+                self._handle_clock(cl, body)
             elif method == "GET" and path == "/wifi/status":
                 self._handle_wifi_status(cl)
             elif method == "POST" and path == "/wifi/reset":
@@ -271,6 +359,23 @@ class Server:
     def _handle_clear(self, cl):
         self.renderer.clear()
         self._send(cl, 200, {"status": "ok", "mode": "idle"})
+
+    def _handle_clock(self, cl, body):
+        import timesync
+        data = self._parse_json(body)
+        zone = data.get("zone", "UK")
+        color = data.get("color", [0, 255, 200])
+        seconds = bool(data.get("seconds", False))
+        chunky = bool(data.get("chunky", False))
+        if zone not in timesync.TIMEZONES:
+            self._send(cl, 400, {"error": "unknown zone: " + zone,
+                                 "zones": list(timesync.TIMEZONES.keys())})
+            return
+        if not timesync.is_synced():
+            timesync.sync()
+        self.renderer.set_clock(zone=zone, color=tuple(color), seconds=seconds, chunky=chunky)
+        self._send(cl, 200, {"status": "ok", "mode": "clock", "zone": zone,
+                             "synced": timesync.is_synced()})
 
     def _handle_wifi_status(self, cl):
         import credential_store
