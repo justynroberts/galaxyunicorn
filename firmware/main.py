@@ -78,26 +78,29 @@ server = Server(renderer, EFFECTS, ip, PORT)
 server.start(time.time())
 print("[boot] HTTP server on port", PORT)
 
-mdns = None
-try:
-    from mdns import MDNSResponder
-    mdns = MDNSResponder(HOSTNAME, ip)
-    mdns.start()
-    print("[boot] mDNS:", HOSTNAME + ".local ->", ip)
-except Exception as e:
-    print("[boot] mDNS failed:", e)
+# mDNS skipped — port 5353 is bound by the firmware's native mDNS,
+# and our extra responder leaks a half-bound socket on startup.
 
 renderer.clear()
-
 gc.collect()
 print("[boot] free mem:", gc.mem_free())
 
+# Throttle renderer to ~30 fps so it doesn't saturate the LED PIO/SPI
+RENDER_INTERVAL_MS = 33
+last_render = time.ticks_ms()
+
 while True:
-    server.poll()
-    if mdns:
+    try:
+        server.poll()
+    except Exception as e:
+        print("[main] server.poll error:", e)
+
+    now = time.ticks_ms()
+    if time.ticks_diff(now, last_render) >= RENDER_INTERVAL_MS:
         try:
-            mdns.poll()
-        except Exception:
-            pass
-    renderer.tick()
+            renderer.tick()
+        except Exception as e:
+            print("[main] renderer.tick error:", e)
+        last_render = now
+
     time.sleep_ms(5)
