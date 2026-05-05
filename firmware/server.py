@@ -23,9 +23,12 @@ class Server:
     def poll(self):
         try:
             cl, addr = self.sock.accept()
-            self._handle_client(cl)
         except OSError:
-            pass
+            return
+        # _handle_client must NOT propagate exceptions back to poll's
+        # accept-timeout handler, otherwise OSError from a busted client
+        # would be swallowed silently.
+        self._handle_client(cl)
 
     def _handle_client(self, cl):
         try:
@@ -108,21 +111,28 @@ class Server:
         status_text = {200: "OK", 204: "No Content", 400: "Bad Request",
                        404: "Not Found", 500: "Internal Server Error"}
         st = status_text.get(status, "OK")
-        headers = (
-            "HTTP/1.1 {} {}\r\n"
-            "Access-Control-Allow-Origin: *\r\n"
-            "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
-            "Access-Control-Allow-Headers: Content-Type\r\n"
-        ).format(status, st)
 
         if data is not None:
-            body = ujson.dumps(data)
-            headers += "Content-Type: application/json\r\n"
-            headers += "Content-Length: {}\r\n".format(len(body))
-            headers += "\r\n"
-            cl.sendall(headers.encode() + body.encode())
+            body = ujson.dumps(data).encode()
+            headers = (
+                "HTTP/1.1 {} {}\r\n"
+                "Access-Control-Allow-Origin: *\r\n"
+                "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
+                "Access-Control-Allow-Headers: Content-Type\r\n"
+                "Content-Type: application/json\r\n"
+                "Content-Length: {}\r\n"
+                "Connection: close\r\n\r\n"
+            ).format(status, st, len(body))
+            cl.sendall(headers.encode() + body)
         else:
-            headers += "\r\n"
+            headers = (
+                "HTTP/1.1 {} {}\r\n"
+                "Access-Control-Allow-Origin: *\r\n"
+                "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
+                "Access-Control-Allow-Headers: Content-Type\r\n"
+                "Content-Length: 0\r\n"
+                "Connection: close\r\n\r\n"
+            ).format(status, st)
             cl.sendall(headers.encode())
 
     def _handle_status(self, cl):

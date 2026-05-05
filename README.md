@@ -8,7 +8,7 @@ Send scrolling text, render images, draw pixel art, and trigger visual effects f
 
 Two components:
 
-- **Firmware** (MicroPython on Pico W) -- lightweight HTTP API server on port 8080. Receives commands, renders to the LED matrix.
+- **Firmware** (MicroPython on Pico W) -- lightweight HTTP API server on port 80. Receives commands, renders to the LED matrix.
 - **Web App** (Vite + React + TypeScript + Tailwind) -- dark-themed control panel. Handles image processing, pixel art editing, animation generation, and sends compact payloads to the device.
 
 ```
@@ -79,17 +79,17 @@ Full reference: [API.md](API.md)
 
 ```bash
 # Send a message
-curl -X POST http://<ip>:8080/message \
+curl -X POST http://<ip>/message \
   -d '{"text":"Hello","color":[0,255,0],"speed":1,"font":"bitmap8"}'
 
 # Start an effect
-curl -X POST http://<ip>:8080/effect -d '{"name":"fire"}'
+curl -X POST http://<ip>/effect -d '{"name":"fire"}'
 
 # Set brightness
-curl -X POST http://<ip>:8080/brightness -d '{"value":0.8}'
+curl -X POST http://<ip>/brightness -d '{"value":0.8}'
 
 # Clear
-curl -X POST http://<ip>:8080/clear
+curl -X POST http://<ip>/clear
 ```
 
 ## Fonts

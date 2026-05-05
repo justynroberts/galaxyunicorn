@@ -2,7 +2,7 @@
 
 HTTP JSON API running on a Pimoroni Galactic Unicorn (53x11 RGB LED matrix, Raspberry Pi Pico W).
 
-**Base URL:** `http://<device-ip>:8080`
+**Base URL:** `http://<device-ip>`
 
 All endpoints return JSON. CORS is enabled for all origins. The device IP is printed to serial on boot and shown on the display.
 
@@ -37,7 +37,7 @@ Returns the current state of the display.
 **Example:**
 
 ```bash
-curl http://192.168.3.43:8080/status
+curl http://192.168.3.43/status
 ```
 
 ---
@@ -84,7 +84,7 @@ Displays scrolling text across the LED matrix.
 **Example:**
 
 ```bash
-curl -X POST http://192.168.3.43:8080/message \
+curl -X POST http://192.168.3.43/message \
   -d '{"text":"Hello","color":[255,0,0],"speed":2,"font":"bitmap7"}'
 ```
 
@@ -162,7 +162,7 @@ import base64
 # 53x11 pixels, all red
 data = bytes([255, 0, 0] * (53 * 11))
 print(base64.b64encode(data).decode())
-" | xargs -I{} curl -X POST http://192.168.3.43:8080/pixels -d '{"pixels":"{}"}'
+" | xargs -I{} curl -X POST http://192.168.3.43/pixels -d '{"pixels":"{}"}'
 ```
 
 **Example (generate from Python):**
@@ -182,7 +182,7 @@ for y in range(height):
         pixels[i + 2] = 128                     # blue
 
 payload = json.dumps({"pixels": base64.b64encode(pixels).decode()}).encode()
-req = urllib.request.Request("http://192.168.3.43:8080/pixels", data=payload)
+req = urllib.request.Request("http://192.168.3.43/pixels", data=payload)
 urllib.request.urlopen(req)
 ```
 
@@ -234,7 +234,7 @@ Starts a built-in visual effect. The effect runs continuously until another mode
 **Example:**
 
 ```bash
-curl -X POST http://192.168.3.43:8080/effect -d '{"name":"rainbow"}'
+curl -X POST http://192.168.3.43/effect -d '{"name":"rainbow"}'
 ```
 
 ---
@@ -267,7 +267,7 @@ Sets the display brightness.
 **Example:**
 
 ```bash
-curl -X POST http://192.168.3.43:8080/brightness -d '{"value":0.3}'
+curl -X POST http://192.168.3.43/brightness -d '{"value":0.3}'
 ```
 
 ---
@@ -288,7 +288,7 @@ Clears the display and returns to idle mode. No request body required.
 **Example:**
 
 ```bash
-curl -X POST http://192.168.3.43:8080/clear
+curl -X POST http://192.168.3.43/clear
 ```
 
 ---

@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Display dimensions: 53 wide x 11 high pixels
 - SDK: `galactic` (GalacticUnicorn) and `picographics` (PicoGraphics, DISPLAY_GALACTIC_UNICORN) -- Pimoroni MicroPython libraries in the firmware
 - Brightness: `gu.set_brightness(0.0-1.0)`, gamma correction applied automatically
-- Pico W connects to Wi-Fi and runs HTTP API server on port 8080
+- Pico W connects to Wi-Fi and runs HTTP API server on port 80
 - ~200KB usable heap, raw pixel frame = 1749 bytes (53x11x3 RGB)
 - Available fonts: bitmap5, bitmap6, bitmap7, bitmap8, bitmap10, font6, font8, font10 (all fit within 11px height)
 - Drawing primitives: pixel, line, circle, rectangle, triangle, polygon, text
@@ -56,7 +56,7 @@ mpremote connect /dev/cu.usbmodem1101 cat :filename.py
 mpremote connect /dev/cu.usbmodem1101 repl
 ```
 
-## Firmware API (port 8080)
+## Firmware API (port 80)
 
 Full API reference with examples, payload formats, and error codes: **[API.md](API.md)**
 
@@ -89,7 +89,7 @@ npm run build      # Production build
 
 - Vite + React 18 + TypeScript + Tailwind CSS v3.4.x
 - Dark theme (Uber-style), Space Grotesk / Spline Sans Mono fonts
-- Device URL stored in localStorage, defaults to http://192.168.3.43:8080
+- Device URL stored in localStorage, defaults to http://192.168.3.43
 - Polls /status every 3s, sequential request queue (Pico max 5 TCP connections)
 - Image processing in browser: canvas resize to 53x11, Floyd-Steinberg dithering, base64 encode
 

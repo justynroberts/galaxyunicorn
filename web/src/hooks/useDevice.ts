@@ -6,9 +6,9 @@ const STORAGE_KEY = 'galactic-device-url';
 
 function getInitialUrl(): string {
   try {
-    return localStorage.getItem(STORAGE_KEY) || 'http://192.168.3.43:8080';
+    return localStorage.getItem(STORAGE_KEY) || 'http://192.168.3.43';
   } catch {
-    return 'http://192.168.3.43:8080';
+    return 'http://192.168.3.43';
   }
 }
 
