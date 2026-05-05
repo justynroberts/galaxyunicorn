@@ -6,6 +6,16 @@ import ujson
 from mdns import MDNSResponder
 
 
+def _log(*args):
+    msg = " ".join(str(a) for a in args)
+    print(msg)
+    try:
+        with open("boot.log", "a") as f:
+            f.write(msg + "\n")
+    except Exception:
+        pass
+
+
 PORTAL_HTML = """<!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Galactic Unicorn Setup</title>
@@ -38,20 +48,33 @@ button.ghost:hover{color:#fff;border-color:#666}
 <label>Password</label>
 <input type="password" name="password" id="pw" autocomplete="off">
 <button type="submit" id="btn">Connect</button>
-<button type="button" class="ghost" onclick="location.reload()">Refresh networks</button>
+<button type="button" class="ghost" id="refresh">Refresh networks</button>
 </form>
 <div id="msg"></div>
 </div>
 <script>
-const f=document.getElementById('f'),m=document.getElementById('msg'),b=document.getElementById('btn');
+const f=document.getElementById('f'),m=document.getElementById('msg'),b=document.getElementById('btn'),r=document.getElementById('refresh'),sel=document.getElementById('ssid');
 function show(t,c){m.textContent=t;m.className=c;m.style.display='block'}
+function bars(rssi){let n=rssi>=-55?4:rssi>=-65?3:rssi>=-75?2:1;return '['+'='.repeat(n)+' '.repeat(4-n)+']'}
+r.onclick=async()=>{
+  r.disabled=true;r.textContent='Scanning... (~6s)';show('Rescanning networks. Wi-Fi may briefly drop.','info');
+  try{
+    const resp=await fetch('/rescan',{method:'POST'});
+    const j=await resp.json();
+    sel.innerHTML='';
+    if(!j.networks||!j.networks.length){sel.innerHTML='<option value="">No networks found</option>'}
+    else{j.networks.forEach(n=>{const o=document.createElement('option');o.value=n.ssid;o.textContent=bars(n.rssi)+' '+n.ssid;sel.appendChild(o)})}
+    show('Found '+(j.networks?j.networks.length:0)+' networks.','ok');
+  }catch(err){show('Rescan failed: '+err.message,'err')}
+  finally{r.disabled=false;r.textContent='Refresh networks'}
+};
 f.onsubmit=async e=>{e.preventDefault();
-  const s=document.getElementById('ssid').value,p=document.getElementById('pw').value;
+  const s=sel.value,p=document.getElementById('pw').value;
   b.disabled=true;b.textContent='Testing connection...';show('Connecting to '+s+'...','info');
   try{
-    const r=await fetch('/connect',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'ssid='+encodeURIComponent(s)+'&password='+encodeURIComponent(p)});
-    const j=await r.json();
-    if(j.ok){show('Connected! Saving and rebooting in 3s...','ok');setTimeout(()=>show('Reboot the display has rejoined your network. You can close this page.','ok'),3000)}
+    const resp=await fetch('/connect',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'ssid='+encodeURIComponent(s)+'&password='+encodeURIComponent(p)});
+    const j=await resp.json();
+    if(j.ok){show('Connected! Saving and rebooting in 3s...','ok');setTimeout(()=>show('The display has rejoined your network. You can close this page.','ok'),3000)}
     else{show('Failed: '+(j.error||'unknown error'),'err');b.disabled=false;b.textContent='Connect'}
   }catch(err){show('Network error: '+err.message,'err');b.disabled=false;b.textContent='Connect'}
 };
@@ -79,37 +102,61 @@ class CaptivePortal:
         self.networks = []
         self.http_sock = None
         self.dns_sock = None
+        self.dhcp = None
         self.mdns = None
         self.ap = None
         self.result = None  # None | {"ssid":..., "password":...}
 
-    def scan_networks(self):
+    def scan_networks(self, passes=5):
+        # Drop AP if it's up so the radio can fully scan.
+        ap_was_up = self.ap and self.ap.active()
+        if ap_was_up:
+            try:
+                self.ap.active(False)
+                time.sleep_ms(500)
+            except Exception:
+                pass
+
         sta = network.WLAN(network.STA_IF)
         sta.active(True)
-        time.sleep(1)
-        try:
-            raw = sta.scan()
-        except Exception as e:
-            print("[portal] scan error:", e)
-            raw = []
-        sta.active(False)
-        time.sleep_ms(200)
+        time.sleep(2)
 
         seen = {}
-        for entry in raw:
+        for attempt in range(passes):
             try:
-                ssid = entry[0].decode("utf-8", "ignore").strip()
-                rssi = entry[3]
-                if not ssid:
+                raw = sta.scan()
+            except Exception as e:
+                _log("[portal] scan error:", e)
+                raw = []
+            for entry in raw:
+                try:
+                    ssid = entry[0].decode("utf-8", "ignore").strip()
+                    rssi = entry[3]
+                    if not ssid:
+                        continue
+                    if ssid not in seen or rssi > seen[ssid]:
+                        seen[ssid] = rssi
+                except Exception:
                     continue
-                if ssid not in seen or rssi > seen[ssid]:
-                    seen[ssid] = rssi
-            except Exception:
-                continue
+            _log("[portal] scan pass", attempt + 1, "found", len(seen), "unique")
+            time.sleep_ms(800)
+
+        sta.active(False)
+        time.sleep_ms(300)
 
         self.networks = sorted(seen.items(), key=lambda x: -x[1])
-        print("[portal] scanned", len(self.networks), "networks")
+        _log("[portal] scanned", len(self.networks), "networks total")
         gc.collect()
+
+        # Bring AP back up if we took it down
+        if ap_was_up:
+            try:
+                self.ap.active(True)
+                while not self.ap.active():
+                    time.sleep_ms(100)
+                _log("[portal] AP restored after scan")
+            except Exception as e:
+                _log("[portal] AP restore failed:", e)
 
     def start(self):
         if not self.networks:
@@ -122,7 +169,7 @@ class CaptivePortal:
         self.ap.active(True)
         while not self.ap.active():
             time.sleep_ms(100)
-        print("[portal] AP up:", self.ap.ifconfig())
+        _log("[portal] AP up:", self.ap.ifconfig())
 
         # DNS server
         self.dns_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -141,16 +188,16 @@ class CaptivePortal:
         try:
             self.mdns = MDNSResponder("setup", self.ap_ip)
             self.mdns.start()
-            print("[portal] mDNS: setup.local ->", self.ap_ip)
+            _log("[portal] mDNS: setup.local ->", self.ap_ip)
         except Exception as e:
-            print("[portal] mDNS failed:", e)
+            _log("[portal] mDNS failed:", e)
             self.mdns = None
 
         gc.collect()
-        print("[portal] free mem:", gc.mem_free())
+        _log("[portal] free mem:", gc.mem_free())
 
     def poll(self):
-        # DNS first (cheap, drains queue)
+        # DNS
         for _ in range(4):
             if not self._poll_dns():
                 break
@@ -173,9 +220,20 @@ class CaptivePortal:
         except OSError:
             return False
         try:
+            # Extract queried name for logging
+            name_parts = []
+            i = 12
+            while i < len(data) and data[i] != 0:
+                length = data[i]
+                if length == 0 or i + 1 + length > len(data):
+                    break
+                name_parts.append(data[i + 1:i + 1 + length].decode("utf-8", "ignore"))
+                i += 1 + length
+            qname = ".".join(name_parts)
+            _log("[portal] DNS", addr[0], "->", qname)
             self.dns_sock.sendto(self._build_dns_response(data), addr)
         except Exception as e:
-            print("[portal] dns err:", e)
+            _log("[portal] dns err:", e)
         return True
 
     def _build_dns_response(self, query):
@@ -196,6 +254,10 @@ class CaptivePortal:
 
     def _handle_http(self, cl):
         try:
+            try:
+                peer = cl.getpeername()
+            except Exception:
+                peer = ("?", 0)
             cl.settimeout(3)
             data = b""
             while b"\r\n\r\n" not in data:
@@ -231,6 +293,7 @@ class CaptivePortal:
                 self._send_404(cl)
                 return
             method, path = parts[0], parts[1]
+            _log("[portal] HTTP", peer[0], method, path)
 
             # Strip query string
             qmark = path.find("?")
@@ -241,13 +304,15 @@ class CaptivePortal:
                 self._handle_connect(cl, body)
             elif method == "GET" and path == "/":
                 self._send_portal(cl)
+            elif method == "POST" and path == "/rescan":
+                self._handle_rescan(cl)
             elif method == "GET" and path in CAPTIVE_DETECT_PATHS:
                 self._send_redirect(cl)
             else:
                 self._send_redirect(cl)
 
         except Exception as e:
-            print("[portal] http err:", e)
+            _log("[portal] http err:", e)
             try:
                 self._send_404(cl)
             except Exception:
@@ -344,6 +409,17 @@ class CaptivePortal:
             i += 1
         return out
 
+    def _handle_rescan(self, cl):
+        _log("[portal] manual rescan requested")
+        if self.renderer:
+            try:
+                self.renderer.set_scroll("Scanning...", [255, 200, 0], 1, 1, 0, "bitmap6")
+            except Exception:
+                pass
+        self.scan_networks(passes=6)
+        nets = [{"ssid": s, "rssi": r} for s, r in self.networks]
+        self._send_json(cl, 200, {"networks": nets})
+
     def _handle_connect(self, cl, body):
         form = self._parse_form(body)
         ssid = form.get("ssid", "").strip()
@@ -353,7 +429,7 @@ class CaptivePortal:
             self._send_json(cl, 400, {"ok": False, "error": "ssid required"})
             return
 
-        print("[portal] testing connection to:", ssid)
+        _log("[portal] testing connection to:", ssid)
         if self.renderer:
             try:
                 self.renderer.set_scroll("Testing " + ssid, [0, 200, 255], 1, 1, 1, "bitmap6")
@@ -390,7 +466,7 @@ class CaptivePortal:
         connected = sta.isconnected()
         if connected:
             ip = sta.ifconfig()[0]
-            print("[portal] test connection ok:", ip)
+            _log("[portal] test connection ok:", ip)
             sta.disconnect()
             sta.active(False)
             time.sleep_ms(300)
@@ -420,6 +496,11 @@ class CaptivePortal:
         try:
             if self.dns_sock:
                 self.dns_sock.close()
+        except Exception:
+            pass
+        try:
+            if self.dhcp:
+                self.dhcp.stop()
         except Exception:
             pass
         try:

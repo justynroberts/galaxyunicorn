@@ -9,44 +9,12 @@ from effects import EFFECTS
 import credential_store
 
 
-def try_connect(ssid, password, timeout=15, hostname=HOSTNAME):
-    try:
-        network.hostname(hostname)
-    except Exception:
-        pass
-
-    wlan = network.WLAN(network.STA_IF)
-    wlan.active(True)
-
-    try:
-        wlan.config(hostname=hostname)
-    except Exception:
-        pass
-
-    print("[boot] Connecting to", ssid, "...")
-    wlan.connect(ssid, password)
-
-    start = time.time()
-    while not wlan.isconnected() and time.time() - start < timeout:
-        time.sleep(1)
-
-    if wlan.isconnected():
-        ip = wlan.ifconfig()[0]
-        print("[boot] Connected. IP:", ip)
-        return ip
-
-    print("[boot] Connection failed")
-    try:
-        wlan.disconnect()
-    except Exception:
-        pass
-    wlan.active(False)
-    return None
+renderer = Renderer()
+renderer.set_brightness(DEFAULT_BRIGHTNESS)
 
 
-def run_portal(renderer):
+def run_portal():
     from portal import CaptivePortal
-
     renderer.set_scroll("Setup mode - join " + AP_SSID, [255, 200, 0], 1, 1, 0, "bitmap6")
     for _ in range(80):
         renderer.tick()
@@ -54,9 +22,8 @@ def run_portal(renderer):
 
     portal = CaptivePortal(AP_SSID, AP_IP, renderer=renderer)
     portal.start()
-
     renderer.set_scroll("Setup at " + AP_IP, [0, 255, 200], 1, 1, 0, "bitmap6")
-    print("[boot] Portal running at", AP_IP)
+    print("[boot] portal at", AP_IP)
 
     while portal.result is None:
         portal.poll()
@@ -64,70 +31,73 @@ def run_portal(renderer):
         time.sleep_ms(5)
 
     creds = portal.result
-    print("[boot] Portal returned credentials, saving")
-
     credential_store.save(creds["ssid"], creds["password"])
 
     renderer.set_scroll("Saved! Rebooting...", [0, 255, 0], 1, 1, 1, "bitmap6")
     for _ in range(120):
         renderer.tick()
         time.sleep_ms(20)
-
     portal.stop()
     time.sleep(1)
     machine.reset()
 
 
-def main():
-    renderer = Renderer()
-    renderer.set_brightness(DEFAULT_BRIGHTNESS)
+# Boot flow
+c = credential_store.load()
+if not c or not c.get("ssid"):
+    run_portal()  # never returns
 
-    creds = credential_store.load()
-    ip = None
+# Connect with stored credentials
+try:
+    network.hostname(HOSTNAME)
+except Exception:
+    pass
 
-    if creds and creds.get("ssid"):
-        renderer.set_scroll("Connecting...", [0, 200, 255], 1, 1, 0, "bitmap6")
-        for _ in range(20):
-            renderer.tick()
-            time.sleep_ms(10)
-        ip = try_connect(creds["ssid"], creds["password"], timeout=15)
+wlan = network.WLAN(network.STA_IF)
+wlan.active(True)
+try:
+    wlan.config(hostname=HOSTNAME)
+except Exception:
+    pass
 
-    if not ip:
-        print("[boot] No credentials or connection failed - launching portal")
-        run_portal(renderer)
-        return  # machine.reset() inside run_portal
+print("[boot] connecting to", c["ssid"])
+wlan.connect(c["ssid"], c["password"])
 
-    # Show IP briefly, then start server
-    renderer.set_scroll(ip, [0, 255, 0], speed=1, scale=1, repeat=2)
+start = time.time()
+while not wlan.isconnected() and time.time() - start < 20:
+    time.sleep(1)
 
-    start_time = time.time()
-    server = Server(renderer, EFFECTS, ip, PORT)
-    server.start(start_time)
-    print("[boot] HTTP server on port", PORT)
+if not wlan.isconnected():
+    print("[boot] connect failed - portal mode")
+    run_portal()  # never returns
 
-    # Start mDNS so the device is reachable as display.local
-    mdns = None
-    try:
-        from mdns import MDNSResponder
-        mdns = MDNSResponder(HOSTNAME, ip)
-        mdns.start()
-        print("[boot] mDNS: {}.local -> {}".format(HOSTNAME, ip))
-    except Exception as e:
-        print("[boot] mDNS failed:", e)
+ip = wlan.ifconfig()[0]
+print("[boot] connected", ip)
 
-    gc.collect()
-    print("[boot] Free memory:", gc.mem_free())
+server = Server(renderer, EFFECTS, ip, PORT)
+server.start(time.time())
+print("[boot] HTTP server on port", PORT)
 
-    while True:
-        server.poll()
-        if mdns:
-            try:
-                mdns.poll()
-            except Exception:
-                pass
-        renderer.tick()
-        time.sleep_ms(5)
+mdns = None
+try:
+    from mdns import MDNSResponder
+    mdns = MDNSResponder(HOSTNAME, ip)
+    mdns.start()
+    print("[boot] mDNS:", HOSTNAME + ".local ->", ip)
+except Exception as e:
+    print("[boot] mDNS failed:", e)
 
+renderer.clear()
 
-if __name__ == "__main__":
-    main()
+gc.collect()
+print("[boot] free mem:", gc.mem_free())
+
+while True:
+    server.poll()
+    if mdns:
+        try:
+            mdns.poll()
+        except Exception:
+            pass
+    renderer.tick()
+    time.sleep_ms(5)
